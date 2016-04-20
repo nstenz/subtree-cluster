@@ -24,12 +24,19 @@ reduce_subtrees = function(subtrees, species) {
 	for (subtree in subtrees) {
 
 		# Skip full tree
-		if (all.equal.phylo(subtree, tree)) {
+		#if (all.equal.phylo(subtree, tree)) {
+		if (all.equal.phylo(subtree, working_tree)) {
 			next;
 		}
 
 		# Remove this subtree's tips from the full tree
-		tip_tree = drop.tip(tree, subtree$tip.label);
+		#tip_tree = drop.tip(tree, subtree$tip.label);
+		if (length(intersect(working_tree$tip.label, subtree$tip.label)) != length(working_tree$tip.label) - 1) {
+			tip_tree = drop.tip(working_tree, subtree$tip.label);
+		}
+		else {
+			next;
+		}
 
 		# Check if this subtree exists in the current subtree list
 		in_current_subtrees = 0;
@@ -45,7 +52,7 @@ reduce_subtrees = function(subtrees, species) {
 			missed_trees[[length(missed_trees) + 1]] = tip_tree;        
 		}   
 	}
-	subtrees = c(subtrees, missed_trees);
+	#subtrees = c(subtrees, missed_trees);
 
 	# Remove trees which don't include all species
 	#cat(length(subtrees), "initial subtrees\n");
@@ -143,6 +150,16 @@ reduce_subtrees = function(subtrees, species) {
 		}
 	}
 
+#	for (index in 1:length(subtrees_reduced)) {
+#		if (length(subtrees_reduced[[index]]$tip.label) > 3) {
+#			#subtrees_reduced[[index]] = unroot(midpoint(subtrees_reduced[[index]]));
+#			subtrees_reduced[[index]] = midpoint(subtrees_reduced[[index]]);
+#		}
+#		else {
+#			subtrees_reduced[[index]] = midpoint(subtrees_reduced[[index]]);
+#		}
+#	}
+
 	return(subtrees_reduced);
 }
 
@@ -151,7 +168,8 @@ options(echo=TRUE) # if you want see commands in output file
 args <- commandArgs(trailingOnly = TRUE)
 print(args)
 target_tree = args[1];
-target_gene = gsub("\\.ph", "", target_tree);
+#target_gene = gsub("\\.ph", "", target_tree);
+target_gene = gsub("(.*)\\..*$", "\\1", target_tree);
 
 # Check that user gave a tree file
 if (!exists("target_tree")) {
@@ -183,12 +201,14 @@ while (subtree_index <= length(unparsed_trees)) {
 
 	# Tree we are currently working on
 	working_tree = unparsed_trees[[subtree_index]];
+	plot(working_tree, type="phylogram", main=c("working tree"), cex=0.2);
 
 	# Extract names of all species
 	species = gsub("\\|.*$", "", working_tree$tip.label, perl=T);
 	species = unique(species);
 
 	# Extract all subtrees of our tree
+	#subtrees = subtrees(working_tree, wait=T);
 	subtrees = subtrees(working_tree);
 	subtrees_reduced = reduce_subtrees(subtrees, species);
 
@@ -218,7 +238,6 @@ while (subtree_index <= length(unparsed_trees)) {
 
 		# Increment clade color
 		clade_color = clade_color + 1;
-
 		#plot(subtree, type="phylogram", main=c("subtree", index));
 	}
 
@@ -227,31 +246,51 @@ while (subtree_index <= length(unparsed_trees)) {
 	tips_not_in_subtree_indices = match(tips_not_in_subtree, tree$tip.label);
 
 	# Split tips which aren't in a subtree with all members into their own respective subtrees
-	## Disclaimer: not 100% about this methodology
 
 	tree_index = 1;
 	tips_not_in_subtree_trees = vector("list", );
 	class(tips_not_in_subtree_trees) = "multiPhylo";
 	start_tip = tips_not_in_subtree_indices[1];
 
-	# Look at subtrees which were not resolved
-	if (length(tips_not_in_subtree_indices)) {
+	if (length(tips_not_in_subtree_indices > 1)) {
+
+		# Group tips by their ID
+		tip_ranges = vector("character", );
 		for (i in 1:(length(tips_not_in_subtree_indices) - 1)) {
-			index = tips_not_in_subtree_indices[i];	
+			index = tips_not_in_subtree_indices[i];
 			next_index = tips_not_in_subtree_indices[i + 1];
 
+			#cat("index", index, "next_index", next_index, "\n");
+
 			# Clade ends if indices aren't 1 apart or if we are at the last index in the list
-			if (next_index != index + 1 || next_index == tips_not_in_subtree_indices[length(tips_not_in_subtree_indices)]) {
+			if (next_index != index + 1 || i == length(tips_not_in_subtree_indices) - 1) {
 
-				if (start_tip == index) {
-					next;
+				# Prevents skipping of last tip
+				if (i == length(tips_not_in_subtree_indices) - 1) {
+					index = next_index;
 				}
+			
+				# Set range of tips
+				tip_ranges = c(tip_ranges, paste0(start_tip, ":", index));	
+				start_tip = next_index;
+			}
+		}
 
-				# Get MRCA of member tips
-				mrca = getMRCA(working_tree, c(tree$tip.label[start_tip], tree$tip.label[index]));
+		# Check if the tips in the range are monophyletic
+		for (tip_range in tip_ranges) {
+			range = unlist(strsplit(tip_range, ":"));	
 
-				# Extract clade
-				tips_not_in_subtree_trees[[tree_index]] = extract.clade(working_tree, mrca);
+			start = as.integer(range[[1]]);
+			end = as.integer(range[[2]]);
+
+			# Add to list of unparsed trees if monophyletic
+			if (is.monophyletic(tree, tree$tip.label[start:end])) {
+
+				# Get tips not in the subtree
+				inverse_clade_tips = tree$tip.label[seq(-1 * start, -1 * end, -1)];
+
+				# Extract clade by removing tips not in subtree
+				tips_not_in_subtree_trees[[tree_index]] = drop.tip(working_tree, inverse_clade_tips);
 
 				# Set file name and output tree
 				filename = paste0(target_gene, "_missing", tree_index, ".tre");
@@ -259,19 +298,134 @@ while (subtree_index <= length(unparsed_trees)) {
 				# Add this subtree to out list of subtrees to check
 				unparsed_trees[[subtree_count + 1]] = tips_not_in_subtree_trees[[tree_index]];
 				subtree_count = subtree_count + 1;
-				
-				#print(filename);
-				#write.tree(tips_not_in_subtree_trees[[tree_index]], file=filename);
 
 				# Iterate counters for next clade
 				tree_index = tree_index + 1;
-				start_tip = next_index;
+			}
+			else {
+				print(tip_range);
+
+				# Determine which tips form monophyletic clades
+				mono = vector("character", );
+				for (i in start:(end - 1)) {
+					tip1 = i;
+
+					for (j in (i + 1):end) {
+						tip2 = j;
+
+						if (is.monophyletic(tree, c(tree$tip.label[tip1], tree$tip.label[tip2]))) {
+							mono = c(mono, paste0(tip1, ":", tip2));	
+							cat(tree$tip.label[tip1], tree$tip.label[tip2],"\n");
+						}
+					}
+				}
+				print(mono);
+				#q();
+
+				# Remove overlapping monophyletic clades if a larger one exists
+				mono_reduced = mono;
+				for (index in (length(mono_reduced)):1) {
+					for (index2 in 1:(length(mono_reduced))) {
+						if (index == index) {
+							next;
+						}
+
+						range1 = unlist(strsplit(mono_reduced[index], ":"));
+						range2 = unlist(strsplit(mono_reduced[index2], ":"));
+
+						# TODO: REDUCE
+						start1 = as.integer(range1[[1]]);
+						end1 = as.integer(range1[[2]]);
+
+						start2 = as.integer(range2[[1]]);
+						end2 = as.integer(range2[[2]]);
+
+						range1 = start1:end1;
+						range2 = start2:end2;
+
+						overlap = intersect(range1, range2);
+
+						# Check if there is overlap
+						if (overlap) {
+							cat("overlapping monophyletic:", overlap,"\n");
+
+							# Remove smaller 
+							if (length(range2) < length(range1)) {
+								mono_reduced[[index2]] = NULL;
+							}
+							else {
+								mono_reduced[[index]] = NULL;
+							}
+							break;
+						}
+					}
+				}
+
+				# Handle single tips not in a monophyletic group
+				for (index in start:end) {
+					in_group = 0;
+					for (group in mono_reduced) {
+							range1 = unlist(strsplit(group, ":"));
+
+							# TODO: REDUCE
+							start1 = as.integer(range1[[1]]);
+							end1 = as.integer(range1[[2]]);
+
+							range1 = start1:end1;
+
+						if (index %in% range1) {
+							in_group = 1;				
+						}
+					}
+
+					if (!in_group) {
+						tip_colors[index] = clade_color;
+
+						# Increment clade color
+						clade_color = clade_color + 1;
+					}
+				}
+
+				# Add monophyletic groups to unparsed subtrees
+				for (group in mono_reduced) {
+					range1 = unlist(strsplit(group, ":"));
+
+					# TODO: REDUCE
+					start1 = as.integer(range1[[1]]);
+					end1 = as.integer(range1[[2]]);
+
+					range1 = start1:end1;
+
+					# Get tips not in the subtree
+					inverse_clade_tips = tree$tip.label[seq(-1 * start1, -1 * end1, -1)];
+
+					# Extract clade
+					clade = drop.tip(working_tree, inverse_clade_tips);
+					tips_not_in_subtree_trees[[tree_index]] = clade;
+
+					# Set file name and output tree
+					filename = paste0(target_gene, "_missing", tree_index, ".tre");
+
+					# Add this subtree to out list of subtrees to check
+					unparsed_trees[[subtree_count + 1]] = tips_not_in_subtree_trees[[tree_index]];
+					subtree_count = subtree_count + 1;
+
+					# Iterate counters for next clade
+					tree_index = tree_index + 1;
+				}
 			}
 		}
 	}
+	else {
+		for (index in tips_not_in_subtree_indices) {
+			tip_colors[index] = clade_color;
+		}
+
+		# Increment clade color
+		clade_color = clade_color + 1;
+	}
 
 	subtree_index = subtree_index + 1;
-
 }
 
 # Set up clade-color coding
@@ -290,7 +444,9 @@ par(bg="black");
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", adj=0);
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", label.offset=0.01);
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", edge.color="white", label.offset=0.01);
-plot(tree, cex = 0.4, type="fan", tip.color=tip_colors, lab4ut="axial", edge.color="white", label.offset=0.01);
+plot(midpoint(tree), cex = 0.4, type="fan", tip.color=tip_colors, lab4ut="axial", edge.color="white", label.offset=0.01);
 title(main=c("Clades"), col.main="white");
+#tiplabels(tip_colors, cex = 0.3);
+#tiplabels(cex = 0.3);
 
 dev.off();
