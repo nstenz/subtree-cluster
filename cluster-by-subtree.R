@@ -169,7 +169,8 @@ args <- commandArgs(trailingOnly = TRUE)
 print(args)
 target_tree = args[1];
 #target_gene = gsub("\\.ph", "", target_tree);
-target_gene = gsub("(.*)\\..*$", "\\1", target_tree);
+#target_gene = gsub("(.*)\\..*$", "\\1", target_tree);
+target_gene = target_tree;
 
 # Check that user gave a tree file
 if (!exists("target_tree")) {
@@ -193,7 +194,6 @@ unparsed_trees = vector("list", );
 class(unparsed_trees) = "multiPhylo";
 unparsed_trees[[1]] = tree;
 
-#start = 1;
 clade_color = 1;
 subtree_index = 1;
 subtree_count = 1;
@@ -201,7 +201,7 @@ while (subtree_index <= length(unparsed_trees)) {
 
 	# Tree we are currently working on
 	working_tree = unparsed_trees[[subtree_index]];
-	plot(working_tree, type="phylogram", main=c("working tree"), cex=0.2);
+	#plot(working_tree, type="phylogram", main=c("working tree"), cex=0.2);
 
 	# Extract names of all species
 	species = gsub("\\|.*$", "", working_tree$tip.label, perl=T);
