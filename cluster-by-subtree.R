@@ -444,7 +444,7 @@ par(bg="black");
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", adj=0);
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", label.offset=0.01);
 #plot(tree, cex = 0.5, type="fan", main=c("full with clades"), tip.color=tip_colors, lab4ut="axial", edge.color="white", label.offset=0.01);
-plot(midpoint(tree), cex = 0.4, type="fan", tip.color=tip_colors, lab4ut="axial", edge.color="white", label.offset=0.01);
+plot(midpoint(tree), cex = 0.4, type="fan", tip.color=tip_colors, lab4ut="axial", edge.color="white");
 title(main=c("Clades"), col.main="white");
 #tiplabels(tip_colors, cex = 0.3);
 #tiplabels(cex = 0.3);
